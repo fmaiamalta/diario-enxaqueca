@@ -304,6 +304,14 @@ function renderRegistar() {
           <label for="medicacao">Medicação tomada</label>
           <input type="text" id="medicacao" placeholder="Ex.: Ibuprofeno 400 mg" value="${esc(c.medicacao || '')}" />
         </div>
+        ${savedMeds.length ? `
+        <div class="field">
+          <label for="med-saved">Escolher medicação já usada</label>
+          <select id="med-saved">
+            <option value="">— da lista —</option>
+            ${savedMeds.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('')}
+          </select>
+        </div>` : ''}
         <div class="field">
           <label for="frequencia">Quantas vezes por dia</label>
           <select id="frequencia">
@@ -313,14 +321,6 @@ function renderRegistar() {
             <option value="3x por dia"${c.frequencia === '3x por dia' ? ' selected' : ''}>3x por dia</option>
           </select>
         </div>
-        ${savedMeds.length ? `
-        <div class="field">
-          <label for="med-saved">Escolher medicação já usada</label>
-          <select id="med-saved">
-            <option value="">— da lista —</option>
-            ${savedMeds.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('')}
-          </select>
-        </div>` : ''}
         <div class="field">
           <label for="eficacia">A medicação ajudou?</label>
           <select id="eficacia">
