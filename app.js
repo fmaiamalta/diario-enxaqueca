@@ -204,6 +204,7 @@ function renderRegistar() {
     sintomas: [],
     gatilhos: [],
     medicacao: '',
+    frequencia: '',
     eficacia: '',
     notas: '',
   };
@@ -263,6 +264,15 @@ function renderRegistar() {
         <div class="field">
           <label for="medicacao">Medicação tomada</label>
           <input type="text" id="medicacao" placeholder="Ex.: Ibuprofeno 400 mg" value="${esc(c.medicacao || '')}" />
+        </div>
+        <div class="field">
+          <label for="frequencia">Quantas vezes por dia</label>
+          <select id="frequencia">
+            <option value="">—</option>
+            <option value="1x por dia"${c.frequencia === '1x por dia' ? ' selected' : ''}>1x por dia</option>
+            <option value="2x por dia"${c.frequencia === '2x por dia' ? ' selected' : ''}>2x por dia</option>
+            <option value="3x por dia"${c.frequencia === '3x por dia' ? ' selected' : ''}>3x por dia</option>
+          </select>
         </div>
         ${savedMeds.length ? `
         <div class="field">
@@ -364,6 +374,7 @@ function onSubmit(e) {
     sintomas: collectChips('chips-sin'),
     gatilhos: collectChips('chips-gat'),
     medicacao: document.getElementById('medicacao').value.trim(),
+    frequencia: document.getElementById('frequencia').value,
     eficacia: document.getElementById('eficacia').value,
     notas: document.getElementById('notas').value.trim(),
   };
@@ -420,7 +431,7 @@ function crisisCard(c) {
   const tags = [];
   if (c.localizacao && c.localizacao.length) tags.push(c.localizacao[0] + (c.localizacao.length > 1 ? ` +${c.localizacao.length - 1}` : ''));
   (c.sintomas || []).slice(0, 2).forEach(s => tags.push(s));
-  if (c.medicacao) tags.push('💊 ' + c.medicacao);
+  if (c.medicacao) tags.push('💊 ' + c.medicacao + (c.frequencia ? ' · ' + c.frequencia : ''));
   const dur = fmtDuration(c.inicio, c.fim);
   return `
     <div class="crisis">
@@ -628,7 +639,7 @@ function exportJSON() {
 }
 function exportCSV() {
   if (!crises.length) { toast('Não há registos para exportar.'); return; }
-  const cols = ['inicio', 'fim', 'intensidade', 'localizacao', 'sintomas', 'gatilhos', 'medicacao', 'eficacia', 'notas'];
+  const cols = ['inicio', 'fim', 'intensidade', 'localizacao', 'sintomas', 'gatilhos', 'medicacao', 'frequencia', 'eficacia', 'notas'];
   const head = cols.join(';');
   const rows = crises.map(c => cols.map(k => {
     let v = c[k];
@@ -656,6 +667,7 @@ function importJSON(e) {
         sintomas: Array.isArray(c.sintomas) ? c.sintomas : [],
         gatilhos: Array.isArray(c.gatilhos) ? c.gatilhos : [],
         medicacao: c.medicacao || '',
+        frequencia: c.frequencia || '',
         eficacia: c.eficacia || '',
         notas: c.notas || '',
       }));

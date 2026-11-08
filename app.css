@@ -189,6 +189,7 @@ input[type=range] { flex: 1; accent-color: var(--primary); }
 .tab-fab {
   background: var(--primary); color: #fff; border-radius: 50%;
   width: 56px; height: 56px; flex: 0 0 auto; margin-top: -24px;
+  padding: 0; gap: 0; justify-content: center;
   box-shadow: 0 6px 16px rgba(92,128,168,.4);
 }
 .tab-fab svg { width: 28px; height: 28px; stroke-width: 2.4; }
