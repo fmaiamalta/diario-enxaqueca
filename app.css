@@ -186,14 +186,18 @@ input[type=range] { flex: 1; accent-color: var(--primary); }
 }
 .tab svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .tab.active { color: var(--primary); }
-.tab-fab {
-  background: var(--primary); color: #fff; border-radius: 50%;
-  width: 56px; height: 56px; flex: 0 0 auto; margin-top: -24px;
-  padding: 0; gap: 0; justify-content: center;
-  box-shadow: 0 6px 16px rgba(92,128,168,.4);
+
+/* ---- Cabeçalho de página com botão + ---- */
+.page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.page-head h1 { margin-bottom: 2px; }
+.add-btn {
+  flex: 0 0 auto; width: 46px; height: 46px; border-radius: 50%;
+  background: var(--primary); color: #fff; border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; margin-top: 4px;
+  box-shadow: 0 4px 12px rgba(92,128,168,.4);
 }
-.tab-fab svg { width: 28px; height: 28px; stroke-width: 2.4; }
-.tab-fab.active { color: #fff; }
+.add-btn svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
+.add-btn:active { filter: brightness(.93); }
 
 /* ---- Toast ---- */
 .toast {

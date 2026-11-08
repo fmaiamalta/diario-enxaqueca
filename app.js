@@ -381,6 +381,10 @@ function renderRegistar() {
   bindCommon();
 }
 
+function addBtn() {
+  return `<button class="add-btn" data-nav="registar" aria-label="Registar crise"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>`;
+}
+
 function intDesc(v) {
   if (v <= 2) return 'Ligeira — quase não interfere no dia a dia.';
   if (v <= 4) return 'Leve — incómoda mas consegue funcionar.';
@@ -453,7 +457,7 @@ function renderHistorico() {
   }
 
   const sorted = [...crises].sort((a, b) => sortVal(b) - sortVal(a));
-  let html = `<h1>Histórico</h1><p class="subtitle">${crises.length} ${crises.length === 1 ? 'registo' : 'registos'} no total.</p>`;
+  let html = `<div class="page-head"><div><h1>Histórico</h1><p class="subtitle">${crises.length} ${crises.length === 1 ? 'registo' : 'registos'} no total.</p></div>${addBtn()}</div>`;
 
   let lastKey = '';
   for (const c of sorted) {
@@ -533,8 +537,7 @@ function renderEstatisticas() {
   const topSin = topCounts(crises.flatMap(c => c.sintomas || []));
 
   let html = `
-    <h1>Estatísticas</h1>
-    <p class="subtitle">Padrões a partir dos seus ${total} registos.</p>
+    <div class="page-head"><div><h1>Estatísticas</h1><p class="subtitle">Padrões a partir dos seus ${total} registos.</p></div>${addBtn()}</div>
 
     <div class="stats-grid" style="margin-bottom:14px">
       <div class="stat"><span class="num">${total}</span><span class="lbl">crises</span></div>
