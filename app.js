@@ -3,21 +3,83 @@
 'use strict';
 
 const STORE_KEY = 'enxaq.crises.v1';
+const MEDS_KEY = 'enxaq.meds.v1';
 
 /* ---------- Opções ---------- */
+const PERIODOS = ['Madrugada', 'Manhã', 'Tarde', 'Noite'];
+const PERIODO_HORAS = { 'Madrugada': '00h–06h', 'Manhã': '06h–12h', 'Tarde': '12h–19h', 'Noite': '19h–00h' };
+const DURACOES = ['Menos de 1h', '1–4h', '4–12h', 'Mais de 12h', 'Ainda a decorrer'];
 const LOCALIZACOES = ['Lado esquerdo', 'Lado direito', 'Ambos os lados', 'Testa / frontal', 'Nuca', 'Atrás dos olhos', 'Topo da cabeça'];
 const SINTOMAS = ['Náuseas', 'Vómitos', 'Aura visual', 'Sensibilidade à luz', 'Sensibilidade ao som', 'Sensibilidade a cheiros', 'Tonturas', 'Visão turva', 'Formigueiro', 'Dificuldade de concentração', 'Rigidez no pescoço', 'Temperatura corporal'];
 const GATILHOS = ['Stress', 'Falta de sono', 'Excesso de sono', 'Jejum / saltar refeição', 'Desidratação', 'Álcool', 'Cafeína', 'Chocolate', 'Queijo curado', 'Menstruação', 'Mudança de tempo', 'Calor', 'Frio', 'Esforço físico', 'Ecrãs / luz azul', 'Ruído', 'Perfumes / cheiros fortes'];
-const MEDS_KEY = 'enxaq.meds.v1';
 
-/* ---------- Estado ---------- */
-let crises = load();
-let editingId = null;
+/* ---------- Utilitários base ---------- */
+const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+const MONTHS_LONG = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+function pad(n) { return String(n).padStart(2, '0'); }
+function todayISO() { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
+function diaToDate(dia) { return new Date((dia || todayISO()) + 'T00:00'); }
+function fmtDia(dia) {
+  const d = diaToDate(dia);
+  return `${WEEKDAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+}
+function periodoFromDate(d) {
+  const h = d.getHours();
+  if (h < 6) return 'Madrugada';
+  if (h < 12) return 'Manhã';
+  if (h < 19) return 'Tarde';
+  return 'Noite';
+}
+function periodoIndex(p) { const i = PERIODOS.indexOf(p); return i < 0 ? 1 : i; }
+function durFromMins(m) { return m < 60 ? 'Menos de 1h' : m < 240 ? '1–4h' : m < 720 ? '4–12h' : 'Mais de 12h'; }
+// valor para ordenar: dia + deslocamento do período dentro do dia
+function sortVal(c) { return diaToDate(c.dia).getTime() + periodoIndex(c.periodo) * 3600000; }
+function intensityColor(v) {
+  if (v <= 3) return '#16a34a';
+  if (v <= 6) return '#d97706';
+  if (v <= 8) return '#ea580c';
+  return '#dc2626';
+}
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+/* ---------- Migração + Estado ---------- */
+// Converte registos antigos (inicio/fim) para o novo modelo (dia/periodo/duracao) e normaliza.
+function migrate(c) {
+  const out = Object.assign({}, c);
+  if (!out.dia) {
+    if (out.inicio) {
+      const d = new Date(out.inicio);
+      out.dia = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+      if (!out.periodo) out.periodo = periodoFromDate(d);
+      if (!out.duracao) out.duracao = out.fim ? durFromMins(Math.round((new Date(out.fim) - d) / 60000)) : 'Ainda a decorrer';
+    } else {
+      out.dia = todayISO();
+    }
+  }
+  out.periodo = out.periodo || '';
+  out.duracao = out.duracao || '';
+  out.localizacao = Array.isArray(out.localizacao) ? out.localizacao : [];
+  out.sintomas = Array.isArray(out.sintomas) ? out.sintomas : [];
+  out.gatilhos = Array.isArray(out.gatilhos) ? out.gatilhos : [];
+  out.medicacao = out.medicacao || '';
+  out.frequencia = out.frequencia || '';
+  out.eficacia = out.eficacia || '';
+  out.notas = out.notas || '';
+  if (typeof out.intensidade !== 'number') out.intensidade = 5;
+  if (!out.id) out.id = uid();
+  delete out.inicio;
+  delete out.fim;
+  return out;
+}
 
 function load() {
   try {
     const raw = localStorage.getItem(STORE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    return raw ? JSON.parse(raw).map(migrate) : [];
   } catch (e) { return []; }
 }
 function save() {
@@ -25,6 +87,9 @@ function save() {
   catch (e) { toast('Não foi possível guardar os dados.'); }
 }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+let crises = load();
+let editingId = null;
 
 /* Medicações guardadas (para reescolher) */
 function getSavedMeds() {
@@ -43,44 +108,6 @@ function rememberMed(name) {
     list.push(name);
     try { localStorage.setItem(MEDS_KEY, JSON.stringify(list)); } catch (e) {}
   }
-}
-
-/* ---------- Utilitários ---------- */
-const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
-const MONTHS_LONG = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-
-function pad(n) { return String(n).padStart(2, '0'); }
-function roundTo5(d) {
-  const r = new Date(d);
-  r.setSeconds(0, 0);
-  r.setMinutes(Math.round(r.getMinutes() / 5) * 5);
-  return r;
-}
-function toLocalInput(d) {
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-function fmtDateTime(iso) {
-  const d = new Date(iso);
-  return `${WEEKDAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-function fmtDuration(ini, fim) {
-  if (!fim) return 'Em curso';
-  let mins = Math.round((new Date(fim) - new Date(ini)) / 60000);
-  if (mins < 0) mins = 0;
-  const h = Math.floor(mins / 60), m = mins % 60;
-  if (h === 0) return `${m} min`;
-  if (m === 0) return `${h} h`;
-  return `${h} h ${m} min`;
-}
-function intensityColor(v) {
-  if (v <= 3) return '#16a34a';
-  if (v <= 6) return '#d97706';
-  if (v <= 8) return '#ea580c';
-  return '#dc2626';
-}
-function esc(s) {
-  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 /* ---------- Router ---------- */
@@ -126,13 +153,13 @@ function toast(msg) {
 function renderInicio() {
   const agora = new Date();
   const mesAtual = crises.filter(c => {
-    const d = new Date(c.inicio);
+    const d = diaToDate(c.dia);
     return d.getMonth() === agora.getMonth() && d.getFullYear() === agora.getFullYear();
   });
   const diasSemCrise = calcDiasSemCrise();
   const intensidades = crises.map(c => c.intensidade).filter(n => typeof n === 'number');
   const media = intensidades.length ? (intensidades.reduce((a, b) => a + b, 0) / intensidades.length) : null;
-  const emCurso = crises.find(c => !c.fim);
+  const emCurso = crises.find(c => c.duracao === 'Ainda a decorrer');
 
   let html = `
     <h1>Diário de Enxaqueca</h1>
@@ -142,12 +169,9 @@ function renderInicio() {
   if (emCurso) {
     html += `
       <div class="card" style="border-color:var(--warn)">
-        <strong>⚠️ Crise em curso</strong>
-        <p class="hint" style="margin:6px 0 12px">Começou em ${fmtDateTime(emCurso.inicio)}.</p>
-        <div class="btn-row">
-          <button class="btn btn-primary" data-end="${emCurso.id}">Terminar agora</button>
-          <button class="btn btn-ghost" data-edit="${emCurso.id}">Editar</button>
-        </div>
+        <strong>⚠️ Crise ainda a decorrer</strong>
+        <p class="hint" style="margin:6px 0 12px">${fmtDia(emCurso.dia)}${emCurso.periodo ? ' · ' + emCurso.periodo : ''}.</p>
+        <button class="btn btn-ghost" data-edit="${emCurso.id}">Atualizar / terminar</button>
       </div>`;
   }
 
@@ -172,7 +196,7 @@ function renderInicio() {
       </div>`;
   } else {
     html += `<h2>Últimos registos</h2>`;
-    const recentes = [...crises].sort((a, b) => new Date(b.inicio) - new Date(a.inicio)).slice(0, 3);
+    const recentes = [...crises].sort((a, b) => sortVal(b) - sortVal(a)).slice(0, 3);
     html += recentes.map(crisisCard).join('');
     if (crises.length > 3) {
       html += `<button class="btn btn-ghost" data-nav="historico" style="margin-top:6px">Ver histórico completo (${crises.length})</button>`;
@@ -184,11 +208,11 @@ function renderInicio() {
 }
 
 function calcDiasSemCrise() {
-  const terminadas = crises.filter(c => c.inicio).sort((a, b) => new Date(b.inicio) - new Date(a.inicio));
-  if (!terminadas.length) return null;
-  const ultima = new Date(terminadas[0].fim || terminadas[0].inicio);
-  const diff = Math.floor((Date.now() - ultima) / 86400000);
-  return Math.max(0, diff);
+  const dias = crises.map(c => c.dia).filter(Boolean).sort();
+  if (!dias.length) return null;
+  const ultima = diaToDate(dias[dias.length - 1]);
+  const hoje = diaToDate(todayISO());
+  return Math.max(0, Math.round((hoje - ultima) / 86400000));
 }
 
 /* ======================================================
@@ -196,9 +220,11 @@ function calcDiasSemCrise() {
    ====================================================== */
 function renderRegistar() {
   const editing = editingId ? crises.find(c => c.id === editingId) : null;
+  const now = new Date();
   const c = editing || {
-    inicio: toLocalInput(roundTo5(new Date())),
-    fim: '',
+    dia: todayISO(),
+    periodo: periodoFromDate(now),
+    duracao: '',
     intensidade: 5,
     localizacao: [],
     sintomas: [],
@@ -208,23 +234,23 @@ function renderRegistar() {
     eficacia: '',
     notas: '',
   };
-  const iniVal = editing ? toLocalInput(new Date(c.inicio)) : c.inicio;
-  const fimVal = editing && c.fim ? toLocalInput(new Date(c.fim)) : '';
   const savedMeds = getSavedMeds();
 
   app.innerHTML = `
     <h1>${editing ? 'Editar crise' : 'Registar crise'}</h1>
-    <p class="subtitle">${editing ? 'Atualize os dados desta crise.' : 'Preencha o que souber. Só a data e a intensidade são obrigatórias.'}</p>
+    <p class="subtitle">${editing ? 'Atualize os dados desta crise.' : 'Preencha o que souber. Só o dia e a intensidade são obrigatórios.'}</p>
 
     <form id="form-crise" novalidate>
       <div class="card">
         <div class="field">
-          <label for="inicio">Início da crise *</label>
-          <input type="datetime-local" id="inicio" value="${iniVal}" step="300" required />
+          <label for="dia">Dia da crise *</label>
+          <input type="date" id="dia" value="${c.dia}" required />
         </div>
-        <div class="field">
-          <label for="fim">Fim da crise <span class="hint" style="font-weight:400">(deixe vazio se ainda a tem)</span></label>
-          <input type="datetime-local" id="fim" value="${fimVal}" step="300" />
+        <div class="field" style="margin-bottom:0">
+          <label>Período do dia</label>
+          <div class="chips" id="chips-periodo">
+            ${PERIODOS.map(p => `<button type="button" class="chip" data-val="${esc(p)}" aria-pressed="${c.periodo === p}">${esc(p)} <span style="opacity:.6;font-size:.8em">${PERIODO_HORAS[p]}</span></button>`).join('')}
+          </div>
         </div>
       </div>
 
@@ -236,6 +262,16 @@ function renderRegistar() {
             <span class="int-badge" id="int-badge">${c.intensidade}</span>
           </div>
           <div class="hint" id="int-desc"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="field" style="margin-bottom:0">
+          <label for="duracao">Duração aproximada</label>
+          <select id="duracao">
+            <option value="">—</option>
+            ${DURACOES.map(d => `<option value="${esc(d)}"${c.duracao === d ? ' selected' : ''}>${esc(d)}</option>`).join('')}
+          </select>
         </div>
       </div>
 
@@ -324,8 +360,17 @@ function renderRegistar() {
     if (medSel.value) { document.getElementById('medicacao').value = medSel.value; medSel.value = ''; }
   });
 
-  // Chips
-  document.querySelectorAll('.chip').forEach(ch => {
+  // Período: escolha única
+  document.querySelectorAll('#chips-periodo .chip').forEach(ch => {
+    ch.addEventListener('click', () => {
+      const was = ch.getAttribute('aria-pressed') === 'true';
+      document.querySelectorAll('#chips-periodo .chip').forEach(o => o.setAttribute('aria-pressed', 'false'));
+      ch.setAttribute('aria-pressed', String(!was));
+    });
+  });
+
+  // Chips de escolha múltipla
+  document.querySelectorAll('#chips-loc .chip, #chips-sin .chip, #chips-gat .chip').forEach(ch => {
     ch.addEventListener('click', () => {
       const pressed = ch.getAttribute('aria-pressed') === 'true';
       ch.setAttribute('aria-pressed', String(!pressed));
@@ -353,22 +398,20 @@ function chipList(options, selected) {
 function collectChips(containerId) {
   return [...document.querySelectorAll(`#${containerId} .chip[aria-pressed="true"]`)].map(c => c.dataset.val);
 }
+function collectSingleChip(containerId) {
+  const el = document.querySelector(`#${containerId} .chip[aria-pressed="true"]`);
+  return el ? el.dataset.val : '';
+}
 
 function onSubmit(e) {
   e.preventDefault();
-  const inicioRaw = document.getElementById('inicio').value;
-  if (!inicioRaw) { toast('Indique a data de início.'); return; }
-  const fimRaw = document.getElementById('fim').value;
-  const inicio = new Date(inicioRaw).toISOString();
-  const fim = fimRaw ? new Date(fimRaw).toISOString() : null;
-
-  if (fim && new Date(fim) < new Date(inicio)) {
-    toast('O fim não pode ser antes do início.');
-    return;
-  }
+  const dia = document.getElementById('dia').value;
+  if (!dia) { toast('Indique o dia da crise.'); return; }
 
   const data = {
-    inicio, fim,
+    dia,
+    periodo: collectSingleChip('chips-periodo'),
+    duracao: document.getElementById('duracao').value,
     intensidade: +document.getElementById('intensidade').value,
     localizacao: collectChips('chips-loc'),
     sintomas: collectChips('chips-sin'),
@@ -381,10 +424,10 @@ function onSubmit(e) {
 
   if (editingId) {
     const idx = crises.findIndex(c => c.id === editingId);
-    if (idx >= 0) crises[idx] = { ...crises[idx], ...data };
+    if (idx >= 0) crises[idx] = Object.assign({}, crises[idx], data);
     toast('Crise atualizada.');
   } else {
-    crises.push({ id: uid(), criadoEm: new Date().toISOString(), ...data });
+    crises.push(Object.assign({ id: uid(), criadoEm: new Date().toISOString() }, data));
     toast('Crise registada.');
   }
   rememberMed(data.medicacao);
@@ -409,12 +452,12 @@ function renderHistorico() {
     return;
   }
 
-  const sorted = [...crises].sort((a, b) => new Date(b.inicio) - new Date(a.inicio));
+  const sorted = [...crises].sort((a, b) => sortVal(b) - sortVal(a));
   let html = `<h1>Histórico</h1><p class="subtitle">${crises.length} ${crises.length === 1 ? 'registo' : 'registos'} no total.</p>`;
 
   let lastKey = '';
   for (const c of sorted) {
-    const d = new Date(c.inicio);
+    const d = diaToDate(c.dia);
     const key = `${d.getFullYear()}-${d.getMonth()}`;
     if (key !== lastKey) {
       html += `<div class="month-head">${MONTHS_LONG[d.getMonth()]} ${d.getFullYear()}</div>`;
@@ -432,13 +475,15 @@ function crisisCard(c) {
   if (c.localizacao && c.localizacao.length) tags.push(c.localizacao[0] + (c.localizacao.length > 1 ? ` +${c.localizacao.length - 1}` : ''));
   (c.sintomas || []).slice(0, 2).forEach(s => tags.push(s));
   if (c.medicacao) tags.push('💊 ' + c.medicacao + (c.frequencia ? ' · ' + c.frequencia : ''));
-  const dur = fmtDuration(c.inicio, c.fim);
+  const meta = c.duracao === 'Ainda a decorrer'
+    ? '<span class="ongoing">Ainda a decorrer</span>'
+    : (c.duracao ? 'Duração: ' + c.duracao : '');
   return `
     <div class="crisis">
       <div class="intensity" style="background:${intensityColor(c.intensidade)}">${c.intensidade}</div>
       <div class="body">
-        <div class="when">${fmtDateTime(c.inicio)}</div>
-        <div class="meta">${c.fim ? 'Duração: ' + dur : '<span class="ongoing">Em curso</span>'}</div>
+        <div class="when">${fmtDia(c.dia)}${c.periodo ? ' · ' + esc(c.periodo) : ''}</div>
+        ${meta ? `<div class="meta">${meta}</div>` : ''}
         ${tags.length ? `<div class="tags">${tags.map(t => `<span class="tag">${esc(t)}</span>`).join('')}</div>` : ''}
       </div>
       <button class="edit" data-edit="${c.id}" aria-label="Editar">
@@ -465,10 +510,10 @@ function renderEstatisticas() {
   const total = crises.length;
   const ints = crises.map(c => c.intensidade);
   const mediaInt = (ints.reduce((a, b) => a + b, 0) / total).toFixed(1);
-  const comFim = crises.filter(c => c.fim);
-  const durMedia = comFim.length
-    ? Math.round(comFim.reduce((a, c) => a + (new Date(c.fim) - new Date(c.inicio)) / 60000, 0) / comFim.length)
-    : null;
+
+  // Período mais comum
+  const periodoCounts = PERIODOS.map(p => [p, crises.filter(c => c.periodo === p).length]);
+  const topPeriodo = [...periodoCounts].filter(x => x[1] > 0).sort((a, b) => b[1] - a[1])[0];
 
   // Últimos 6 meses
   const now = new Date();
@@ -478,7 +523,7 @@ function renderEstatisticas() {
     buckets.push({ y: d.getFullYear(), m: d.getMonth(), count: 0 });
   }
   crises.forEach(c => {
-    const d = new Date(c.inicio);
+    const d = diaToDate(c.dia);
     const b = buckets.find(x => x.y === d.getFullYear() && x.m === d.getMonth());
     if (b) b.count++;
   });
@@ -494,7 +539,7 @@ function renderEstatisticas() {
     <div class="stats-grid" style="margin-bottom:14px">
       <div class="stat"><span class="num">${total}</span><span class="lbl">crises</span></div>
       <div class="stat"><span class="num">${mediaInt}</span><span class="lbl">intensidade média</span></div>
-      <div class="stat"><span class="num">${durMedia !== null ? fmtDurShort(durMedia) : '—'}</span><span class="lbl">duração média</span></div>
+      <div class="stat"><span class="num" style="font-size:1.05rem">${topPeriodo ? esc(topPeriodo[0]) : '—'}</span><span class="lbl">período mais comum</span></div>
     </div>
 
     <div class="card">
@@ -509,6 +554,27 @@ function renderEstatisticas() {
       </div>
     </div>
   `;
+
+  // Por período do dia
+  const maxPer = Math.max(1, ...periodoCounts.map(p => p[1]));
+  if (periodoCounts.some(p => p[1] > 0)) {
+    html += `
+      <div class="card">
+        <h2 style="margin-top:0">Por período do dia</h2>
+        ${periodoCounts.map(([name, n]) => barRow(name, n, maxPer)).join('')}
+      </div>`;
+  }
+
+  // Duração
+  const durCounts = DURACOES.map(d => [d, crises.filter(c => c.duracao === d).length]).filter(x => x[1] > 0);
+  if (durCounts.length) {
+    const maxDur = Math.max(...durCounts.map(d => d[1]));
+    html += `
+      <div class="card">
+        <h2 style="margin-top:0">Duração das crises</h2>
+        ${durCounts.map(([name, n]) => barRow(name, n, maxDur)).join('')}
+      </div>`;
+  }
 
   if (topGat.length) {
     const max = topGat[0][1];
@@ -559,12 +625,6 @@ function barRow(name, n, max) {
     <div class="bar-track"><div class="bar-fill" style="width:${Math.max(4, n / max * 100)}%"></div></div>
     <span class="val">${n}</span>
   </div>`;
-}
-function fmtDurShort(mins) {
-  const h = Math.floor(mins / 60), m = mins % 60;
-  if (h === 0) return m + 'm';
-  if (m === 0) return h + 'h';
-  return `${h}h${m}`;
 }
 
 /* ======================================================
@@ -639,7 +699,7 @@ function exportJSON() {
 }
 function exportCSV() {
   if (!crises.length) { toast('Não há registos para exportar.'); return; }
-  const cols = ['inicio', 'fim', 'intensidade', 'localizacao', 'sintomas', 'gatilhos', 'medicacao', 'frequencia', 'eficacia', 'notas'];
+  const cols = ['dia', 'periodo', 'duracao', 'intensidade', 'localizacao', 'sintomas', 'gatilhos', 'medicacao', 'frequencia', 'eficacia', 'notas'];
   const head = cols.join(';');
   const rows = crises.map(c => cols.map(k => {
     let v = c[k];
@@ -658,19 +718,7 @@ function importJSON(e) {
     try {
       const data = JSON.parse(reader.result);
       if (!Array.isArray(data)) throw new Error('formato');
-      const clean = data.filter(c => c && c.inicio).map(c => ({
-        id: c.id || uid(),
-        inicio: c.inicio,
-        fim: c.fim || null,
-        intensidade: typeof c.intensidade === 'number' ? c.intensidade : 5,
-        localizacao: Array.isArray(c.localizacao) ? c.localizacao : [],
-        sintomas: Array.isArray(c.sintomas) ? c.sintomas : [],
-        gatilhos: Array.isArray(c.gatilhos) ? c.gatilhos : [],
-        medicacao: c.medicacao || '',
-        frequencia: c.frequencia || '',
-        eficacia: c.eficacia || '',
-        notas: c.notas || '',
-      }));
+      const clean = data.filter(c => c && (c.dia || c.inicio)).map(migrate);
       if (!confirm(`Importar ${clean.length} registos? Os atuais (${crises.length}) serão substituídos.`)) return;
       crises = clean;
       save();
@@ -692,10 +740,6 @@ function bindCommon() {
       crises = crises.filter(c => c.id !== b.dataset.delete);
       save(); editingId = null; toast('Crise apagada.'); go('historico');
     }
-  }));
-  document.querySelectorAll('[data-end]').forEach(b => b.addEventListener('click', () => {
-    const c = crises.find(x => x.id === b.dataset.end);
-    if (c) { c.fim = new Date().toISOString(); save(); toast('Crise terminada.'); go('inicio'); }
   }));
 }
 

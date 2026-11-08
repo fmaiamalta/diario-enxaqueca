@@ -6,8 +6,9 @@ ficam guardados apenas no dispositivo (localStorage) — nada é enviado para a 
 
 ## Funcionalidades
 
-- **Registar crise**: início/fim, intensidade (1–10) com descritor, localização da dor,
-  sintomas, possíveis gatilhos, medicação e eficácia, notas.
+- **Registar crise**: dia e período (madrugada/manhã/tarde/noite), intensidade (1–10) com
+  descritor, duração aproximada, localização da dor, sintomas, possíveis gatilhos,
+  medicação (com frequência e memória de medicações usadas) e eficácia, notas.
 - **Início**: resumo rápido (crises no mês, dias sem crise, intensidade média), aviso de
   crise em curso e últimos registos.
 - **Histórico**: lista cronológica agrupada por mês, com editar e apagar.
