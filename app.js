@@ -6,8 +6,9 @@ const STORE_KEY = 'enxaq.crises.v1';
 
 /* ---------- Opções ---------- */
 const LOCALIZACOES = ['Lado esquerdo', 'Lado direito', 'Ambos os lados', 'Testa / frontal', 'Nuca', 'Atrás dos olhos', 'Topo da cabeça'];
-const SINTOMAS = ['Náuseas', 'Vómitos', 'Aura visual', 'Sensibilidade à luz', 'Sensibilidade ao som', 'Sensibilidade a cheiros', 'Tonturas', 'Visão turva', 'Formigueiro', 'Dificuldade de concentração', 'Rigidez no pescoço'];
-const GATILHOS = ['Stress', 'Falta de sono', 'Excesso de sono', 'Jejum / saltar refeição', 'Desidratação', 'Álcool', 'Cafeína', 'Chocolate', 'Queijo curado', 'Menstruação', 'Mudança de tempo', 'Esforço físico', 'Ecrãs / luz azul', 'Ruído', 'Perfumes / cheiros fortes'];
+const SINTOMAS = ['Náuseas', 'Vómitos', 'Aura visual', 'Sensibilidade à luz', 'Sensibilidade ao som', 'Sensibilidade a cheiros', 'Tonturas', 'Visão turva', 'Formigueiro', 'Dificuldade de concentração', 'Rigidez no pescoço', 'Temperatura corporal'];
+const GATILHOS = ['Stress', 'Falta de sono', 'Excesso de sono', 'Jejum / saltar refeição', 'Desidratação', 'Álcool', 'Cafeína', 'Chocolate', 'Queijo curado', 'Menstruação', 'Mudança de tempo', 'Calor', 'Frio', 'Esforço físico', 'Ecrãs / luz azul', 'Ruído', 'Perfumes / cheiros fortes'];
+const MEDS_KEY = 'enxaq.meds.v1';
 
 /* ---------- Estado ---------- */
 let crises = load();
@@ -24,6 +25,25 @@ function save() {
   catch (e) { toast('Não foi possível guardar os dados.'); }
 }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+/* Medicações guardadas (para reescolher) */
+function getSavedMeds() {
+  let list = [];
+  try { list = JSON.parse(localStorage.getItem(MEDS_KEY)) || []; } catch (e) {}
+  const fromCrises = crises.map(c => (c.medicacao || '').trim()).filter(Boolean);
+  const set = new Set([...list, ...fromCrises]);
+  return [...set].sort((a, b) => a.localeCompare(b, 'pt'));
+}
+function rememberMed(name) {
+  name = (name || '').trim();
+  if (!name) return;
+  let list = [];
+  try { list = JSON.parse(localStorage.getItem(MEDS_KEY)) || []; } catch (e) {}
+  if (!list.includes(name)) {
+    list.push(name);
+    try { localStorage.setItem(MEDS_KEY, JSON.stringify(list)); } catch (e) {}
+  }
+}
 
 /* ---------- Utilitários ---------- */
 const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -140,7 +160,7 @@ function renderInicio() {
 
   if (crises.length === 0) {
     html += `
-      <div class="card empty">
+      <div class="card empty" style="margin-top:22px">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6"><path d="M12 3a7 7 0 0 0-7 7c0 2 1 3.5 2 5 .5.8 1 2 1 3h8c0-1 .5-2.2 1-3 1-1.5 2-3 2-5a7 7 0 0 0-7-7Z"/><path d="M9 21h6"/></svg>
         <p>Ainda não há registos.<br>Toque em <strong>+ Registar crise</strong> quando tiver (ou quando acabar) uma crise.</p>
       </div>`;
@@ -183,6 +203,7 @@ function renderRegistar() {
   };
   const iniVal = editing ? toLocalInput(new Date(c.inicio)) : c.inicio;
   const fimVal = editing && c.fim ? toLocalInput(new Date(c.fim)) : '';
+  const savedMeds = getSavedMeds();
 
   app.innerHTML = `
     <h1>${editing ? 'Editar crise' : 'Registar crise'}</h1>
@@ -237,6 +258,14 @@ function renderRegistar() {
           <label for="medicacao">Medicação tomada</label>
           <input type="text" id="medicacao" placeholder="Ex.: Ibuprofeno 400 mg" value="${esc(c.medicacao || '')}" />
         </div>
+        ${savedMeds.length ? `
+        <div class="field">
+          <label for="med-saved">Escolher medicação já usada</label>
+          <select id="med-saved">
+            <option value="">— da lista —</option>
+            ${savedMeds.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('')}
+          </select>
+        </div>` : ''}
         <div class="field" style="margin-bottom:0">
           <label for="eficacia">A medicação ajudou?</label>
           <select id="eficacia">
@@ -272,6 +301,12 @@ function renderRegistar() {
   }
   range.addEventListener('input', updInt);
   updInt();
+
+  // Escolher medicação já usada preenche o campo de texto
+  const medSel = document.getElementById('med-saved');
+  if (medSel) medSel.addEventListener('change', () => {
+    if (medSel.value) { document.getElementById('medicacao').value = medSel.value; medSel.value = ''; }
+  });
 
   // Chips
   document.querySelectorAll('.chip').forEach(ch => {
@@ -335,6 +370,7 @@ function onSubmit(e) {
     crises.push({ id: uid(), criadoEm: new Date().toISOString(), ...data });
     toast('Crise registada.');
   }
+  rememberMed(data.medicacao);
   save();
   editingId = null;
   go('historico');
