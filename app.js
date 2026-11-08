@@ -51,6 +51,12 @@ const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', '
 const MONTHS_LONG = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
 function pad(n) { return String(n).padStart(2, '0'); }
+function roundTo5(d) {
+  const r = new Date(d);
+  r.setSeconds(0, 0);
+  r.setMinutes(Math.round(r.getMinutes() / 5) * 5);
+  return r;
+}
 function toLocalInput(d) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
@@ -191,7 +197,7 @@ function calcDiasSemCrise() {
 function renderRegistar() {
   const editing = editingId ? crises.find(c => c.id === editingId) : null;
   const c = editing || {
-    inicio: toLocalInput(new Date()),
+    inicio: toLocalInput(roundTo5(new Date())),
     fim: '',
     intensidade: 5,
     localizacao: [],
@@ -213,11 +219,11 @@ function renderRegistar() {
       <div class="card">
         <div class="field">
           <label for="inicio">Início da crise *</label>
-          <input type="datetime-local" id="inicio" value="${iniVal}" required />
+          <input type="datetime-local" id="inicio" value="${iniVal}" step="300" required />
         </div>
         <div class="field">
           <label for="fim">Fim da crise <span class="hint" style="font-weight:400">(deixe vazio se ainda a tem)</span></label>
-          <input type="datetime-local" id="fim" value="${fimVal}" />
+          <input type="datetime-local" id="fim" value="${fimVal}" step="300" />
         </div>
       </div>
 
