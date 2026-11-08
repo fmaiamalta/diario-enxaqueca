@@ -9,6 +9,7 @@ const MEDS_KEY = 'enxaq.meds.v1';
 const PERIODOS = ['Madrugada', 'Manhã', 'Tarde', 'Noite'];
 const PERIODO_HORAS = { 'Madrugada': '00h–06h', 'Manhã': '06h–12h', 'Tarde': '12h–19h', 'Noite': '19h–00h' };
 const DURACOES = ['Menos de 1h', '1–4h', '4–12h', 'Mais de 12h', 'Ainda a decorrer'];
+const TEMPOS_EFEITO = ['Menos de 30 min', '30–60 min', '1–2 h', '2–6 h', 'Até 1 dia', '1–3 dias', 'Mais de 3 dias'];
 const LOCALIZACOES = ['Lado esquerdo', 'Lado direito', 'Ambos os lados', 'Testa / frontal', 'Nuca', 'Atrás dos olhos', 'Topo da cabeça'];
 const SINTOMAS = ['Náuseas', 'Vómitos', 'Aura visual', 'Sensibilidade à luz', 'Sensibilidade ao som', 'Sensibilidade a cheiros', 'Tonturas', 'Visão turva', 'Formigueiro', 'Dificuldade de concentração', 'Rigidez no pescoço', 'Temperatura corporal'];
 const GATILHOS = ['Stress', 'Falta de sono', 'Excesso de sono', 'Jejum / saltar refeição', 'Desidratação', 'Álcool', 'Cafeína', 'Chocolate', 'Queijo curado', 'Menstruação', 'Mudança de tempo', 'Calor', 'Frio', 'Esforço físico', 'Ecrãs / luz azul', 'Ruído', 'Perfumes / cheiros fortes'];
@@ -68,6 +69,7 @@ function migrate(c) {
   out.medicacao = out.medicacao || '';
   out.frequencia = out.frequencia || '';
   out.eficacia = out.eficacia || '';
+  out.tempoEfeito = out.tempoEfeito || '';
   out.notas = out.notas || '';
   if (typeof out.intensidade !== 'number') out.intensidade = 5;
   if (!out.id) out.id = uid();
@@ -232,6 +234,7 @@ function renderRegistar() {
     medicacao: '',
     frequencia: '',
     eficacia: '',
+    tempoEfeito: '',
     notas: '',
   };
   const savedMeds = getSavedMeds();
@@ -318,7 +321,7 @@ function renderRegistar() {
             ${savedMeds.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('')}
           </select>
         </div>` : ''}
-        <div class="field" style="margin-bottom:0">
+        <div class="field">
           <label for="eficacia">A medicação ajudou?</label>
           <select id="eficacia">
             <option value="">—</option>
@@ -326,6 +329,14 @@ function renderRegistar() {
             <option value="Aliviou"${c.eficacia === 'Aliviou' ? ' selected' : ''}>Aliviou parcialmente</option>
             <option value="Não ajudou"${c.eficacia === 'Não ajudou' ? ' selected' : ''}>Não ajudou</option>
           </select>
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label for="tempoEfeito">Tempo até fazer efeito</label>
+          <select id="tempoEfeito">
+            <option value="">—</option>
+            ${TEMPOS_EFEITO.map(t => `<option value="${esc(t)}"${c.tempoEfeito === t ? ' selected' : ''}>${esc(t)}</option>`).join('')}
+          </select>
+          <div class="hint">Desde a 1.ª toma até a dor passar (mesmo que tenha tomado vários dias).</div>
         </div>
       </div>
 
@@ -423,6 +434,7 @@ function onSubmit(e) {
     medicacao: document.getElementById('medicacao').value.trim(),
     frequencia: document.getElementById('frequencia').value,
     eficacia: document.getElementById('eficacia').value,
+    tempoEfeito: document.getElementById('tempoEfeito').value,
     notas: document.getElementById('notas').value.trim(),
   };
 
@@ -479,6 +491,7 @@ function crisisCard(c) {
   if (c.localizacao && c.localizacao.length) tags.push(c.localizacao[0] + (c.localizacao.length > 1 ? ` +${c.localizacao.length - 1}` : ''));
   (c.sintomas || []).slice(0, 2).forEach(s => tags.push(s));
   if (c.medicacao) tags.push('💊 ' + c.medicacao + (c.frequencia ? ' · ' + c.frequencia : ''));
+  if (c.tempoEfeito) tags.push('⏱ efeito: ' + c.tempoEfeito);
   const meta = c.duracao === 'Ainda a decorrer'
     ? '<span class="ongoing">Ainda a decorrer</span>'
     : (c.duracao ? 'Duração: ' + c.duracao : '');
@@ -613,6 +626,18 @@ function renderEstatisticas() {
       </div>`;
   }
 
+  // Tempo até fazer efeito
+  const comEfeito = crises.filter(c => c.tempoEfeito);
+  if (comEfeito.length) {
+    const counts = TEMPOS_EFEITO.map(t => [t, comEfeito.filter(c => c.tempoEfeito === t).length]).filter(x => x[1] > 0);
+    const maxE = Math.max(...counts.map(c => c[1]));
+    html += `
+      <div class="card">
+        <h2 style="margin-top:0">Tempo até fazer efeito</h2>
+        ${counts.map(([name, n]) => barRow(name, n, maxE)).join('')}
+      </div>`;
+  }
+
   app.innerHTML = html;
   bindCommon();
 }
@@ -702,7 +727,7 @@ function exportJSON() {
 }
 function exportCSV() {
   if (!crises.length) { toast('Não há registos para exportar.'); return; }
-  const cols = ['dia', 'periodo', 'duracao', 'intensidade', 'localizacao', 'sintomas', 'gatilhos', 'medicacao', 'frequencia', 'eficacia', 'notas'];
+  const cols = ['dia', 'periodo', 'duracao', 'intensidade', 'localizacao', 'sintomas', 'gatilhos', 'medicacao', 'frequencia', 'eficacia', 'tempoEfeito', 'notas'];
   const head = cols.join(';');
   const rows = crises.map(c => cols.map(k => {
     let v = c[k];
