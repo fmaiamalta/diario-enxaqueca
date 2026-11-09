@@ -190,6 +190,14 @@ function renderInicio() {
     </div>
   `;
 
+  if (isBackupOverdue()) {
+    html += `
+      <div class="inline-note" style="align-items:center;justify-content:space-between">
+        <span>💾 Faça uma cópia dos seus registos para não os perder.</span>
+        <button class="btn btn-ghost" data-nav="dados" style="width:auto;flex:0 0 auto;padding:8px 14px">Fazer cópia</button>
+      </div>`;
+  }
+
   if (emCurso) {
     html += `
       <div class="card" style="border-color:var(--warn)">
@@ -689,9 +697,14 @@ function renderDados() {
 
     <div class="card">
       <h2 style="margin-top:0">Cópia de segurança</h2>
-      <p class="hint" style="margin-top:0">Guarde um ficheiro com todos os registos (${crises.length}).</p>
+      <p class="hint" style="margin-top:0">${backupStatusText()}</p>
+      <button class="btn btn-primary" id="share-backup">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="M12 3v13M8 7l4-4 4 4"/></svg>
+        Partilhar cópia
+      </button>
+      <p class="hint" style="margin:10px 0 0">Envie a cópia para outro dispositivo (AirDrop, email, etc.) e abra-a lá em <strong>Restaurar</strong>.</p>
       <div class="btn-row">
-        <button class="btn btn-ghost" id="exp-json">Exportar (.json)</button>
+        <button class="btn btn-ghost" id="exp-json">Guardar (.json)</button>
         <button class="btn btn-ghost" id="exp-csv">Exportar (.csv)</button>
       </div>
     </div>
@@ -714,6 +727,7 @@ function renderDados() {
     </p>
   `;
 
+  document.getElementById('share-backup').addEventListener('click', shareBackup);
   document.getElementById('exp-json').addEventListener('click', exportJSON);
   document.getElementById('exp-csv').addEventListener('click', exportCSV);
   document.getElementById('imp-file').addEventListener('change', importJSON);
@@ -740,9 +754,55 @@ function stamp() {
   const d = new Date();
   return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
 }
+
+/* ---------- Cópias de segurança ---------- */
+const BACKUP_KEY = 'enxaq.lastBackup';
+function backupInfo() {
+  let ts = 0;
+  try { ts = +localStorage.getItem(BACKUP_KEY) || 0; } catch (e) {}
+  if (!ts) return { never: true };
+  return { never: false, dias: Math.floor((Date.now() - ts) / 86400000) };
+}
+function markBackup() {
+  try { localStorage.setItem(BACKUP_KEY, String(Date.now())); } catch (e) {}
+  if (currentView === 'dados') renderDados();
+}
+function isBackupOverdue() {
+  if (!crises.length) return false;
+  const bi = backupInfo();
+  return bi.never || bi.dias >= 30;
+}
+function backupStatusText() {
+  if (!crises.length) return 'Ainda não há registos para guardar.';
+  const bi = backupInfo();
+  const n = `${crises.length} ${crises.length === 1 ? 'registo' : 'registos'}`;
+  if (bi.never) return `Tem ${n} e ainda não fez nenhuma cópia.`;
+  if (bi.dias === 0) return `Última cópia: hoje · ${n}.`;
+  return `Última cópia: há ${bi.dias} ${bi.dias === 1 ? 'dia' : 'dias'} · ${n}.`;
+}
+async function shareBackup() {
+  if (!crises.length) { toast('Não há registos para partilhar.'); return; }
+  const text = JSON.stringify(crises, null, 2);
+  const name = `enxaqueca-${stamp()}.json`;
+  try {
+    const file = new File([text], name, { type: 'application/json' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'Cópia do Diário de Enxaqueca' });
+      markBackup();
+      return;
+    }
+  } catch (e) {
+    if (e && e.name === 'AbortError') return; // utilizador cancelou
+  }
+  // Sem partilha de ficheiros (ex.: computador): descarrega o ficheiro
+  download(name, text, 'application/json');
+  markBackup();
+  toast('Ficheiro guardado.');
+}
 function exportJSON() {
   if (!crises.length) { toast('Não há registos para exportar.'); return; }
   download(`enxaqueca-${stamp()}.json`, JSON.stringify(crises, null, 2), 'application/json');
+  markBackup();
   toast('Ficheiro exportado.');
 }
 function exportCSV() {
