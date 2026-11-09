@@ -1,5 +1,5 @@
 /* Service worker — cache do app shell para funcionar offline */
-const CACHE = 'enxaq-v8';
+const CACHE = 'enxaq-v9';
 const ASSETS = [
   '.',
   'index.html',

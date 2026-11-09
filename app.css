@@ -56,6 +56,10 @@ h1 { font-size: 1.55rem; margin: 0 0 2px; letter-spacing: -.02em; }
 h2 { font-size: 1.1rem; margin: 26px 0 12px; letter-spacing: -.01em; }
 .subtitle { color: var(--text-soft); margin: 0 0 20px; font-size: .95rem; }
 
+.brand { display: flex; align-items: center; gap: 13px; margin-bottom: 22px; }
+.brand-logo { flex: 0 0 auto; border-radius: 12px; box-shadow: var(--shadow); }
+.brand h1 { margin: 0; }
+
 .card {
   background: var(--surface);
   border: 1px solid var(--border);

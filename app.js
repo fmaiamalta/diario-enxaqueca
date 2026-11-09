@@ -8,10 +8,9 @@ const MEDS_KEY = 'enxaq.meds.v1';
 /* ---------- Opções ---------- */
 const PERIODOS = ['Madrugada', 'Manhã', 'Tarde', 'Noite'];
 const PERIODO_HORAS = { 'Madrugada': '00h–06h', 'Manhã': '06h–12h', 'Tarde': '12h–19h', 'Noite': '19h–00h' };
-const DURACOES = ['Menos de 1h', '1–4h', '4–12h', 'Mais de 12h', 'Ainda a decorrer'];
 const TEMPOS_EFEITO = ['Menos de 30 min', '30–60 min', '1–2 h', '2–6 h', 'Até 1 dia', '1–3 dias', 'Mais de 3 dias'];
 const LOCALIZACOES = ['Lado esquerdo', 'Lado direito', 'Ambos os lados', 'Testa / frontal', 'Nuca', 'Atrás dos olhos', 'Topo da cabeça'];
-const SINTOMAS = ['Náuseas', 'Vómitos', 'Aura visual', 'Sensibilidade à luz', 'Sensibilidade ao som', 'Sensibilidade a cheiros', 'Tonturas', 'Visão turva', 'Formigueiro', 'Dificuldade de concentração', 'Rigidez no pescoço', 'Temperatura corporal'];
+const SINTOMAS = ['Náuseas', 'Vómitos', 'Aura visual', 'Sensibilidade à luz', 'Sensibilidade ao som', 'Sensibilidade a cheiros', 'Tonturas', 'Visão turva', 'Formigueiro', 'Dificuldade de concentração', 'Rigidez no pescoço', 'Tensão na cervical', 'Temperatura corporal'];
 const GATILHOS = ['Stress', 'Falta de sono', 'Excesso de sono', 'Jejum / saltar refeição', 'Desidratação', 'Álcool', 'Cafeína', 'Chocolate', 'Queijo curado', 'Menstruação', 'Mudança de tempo', 'Calor', 'Frio', 'Esforço físico', 'Ecrãs / luz azul', 'Ruído', 'Perfumes / cheiros fortes'];
 
 /* ---------- Utilitários base ---------- */
@@ -37,6 +36,19 @@ function periodoIndex(p) { const i = PERIODOS.indexOf(p); return i < 0 ? 1 : i; 
 function durFromMins(m) { return m < 60 ? 'Menos de 1h' : m < 240 ? '1–4h' : m < 720 ? '4–12h' : 'Mais de 12h'; }
 // valor para ordenar: dia + deslocamento do período dentro do dia
 function sortVal(c) { return diaToDate(c.dia).getTime() + periodoIndex(c.periodo) * 3600000; }
+// duração calculada a partir das datas de início e fim
+function nDias(c) { return Math.round((diaToDate(c.diaFim) - diaToDate(c.dia)) / 86400000) + 1; }
+function duracaoTexto(c) {
+  if (!c.diaFim) return 'Ainda a decorrer';
+  if (c.diaFim === c.dia) return 'Mesmo dia';
+  return nDias(c) + ' dias';
+}
+function duracaoCategoria(c) {
+  if (!c.diaFim) return 'Ainda a decorrer';
+  if (c.diaFim === c.dia) return 'Mesmo dia';
+  return nDias(c) <= 3 ? '2–3 dias' : '4+ dias';
+}
+function diaFimDe(c) { return c.diaFim || c.dia; }
 function intensityColor(v) {
   if (v <= 3) return '#16a34a';
   if (v <= 6) return '#d97706';
@@ -62,7 +74,12 @@ function migrate(c) {
     }
   }
   out.periodo = out.periodo || '';
-  out.duracao = out.duracao || '';
+  // Data de fim: deriva do modelo antigo (duracao) quando ainda não existe
+  if (!('diaFim' in out) || out.diaFim == null) {
+    if (out.duracao && out.duracao !== 'Ainda a decorrer') out.diaFim = out.dia; // terminou (mesmo dia)
+    else out.diaFim = ''; // sem fim definido / ainda a decorrer
+  }
+  delete out.duracao;
   out.localizacao = Array.isArray(out.localizacao) ? out.localizacao : [];
   out.sintomas = Array.isArray(out.sintomas) ? out.sintomas : [];
   out.gatilhos = Array.isArray(out.gatilhos) ? out.gatilhos : [];
@@ -161,11 +178,16 @@ function renderInicio() {
   const diasSemCrise = calcDiasSemCrise();
   const intensidades = crises.map(c => c.intensidade).filter(n => typeof n === 'number');
   const media = intensidades.length ? (intensidades.reduce((a, b) => a + b, 0) / intensidades.length) : null;
-  const emCurso = crises.find(c => c.duracao === 'Ainda a decorrer');
+  const emCurso = crises.find(c => !c.diaFim);
 
   let html = `
-    <h1>Diário de Enxaqueca</h1>
-    <p class="subtitle">Olá. Como está a sua cabeça hoje?</p>
+    <div class="brand">
+      <img class="brand-logo" src="icons/icon.svg" alt="" width="48" height="48" />
+      <div>
+        <h1>Diário de Enxaqueca</h1>
+        <p class="subtitle" style="margin:2px 0 0">Olá. Como está a sua cabeça hoje?</p>
+      </div>
+    </div>
   `;
 
   if (emCurso) {
@@ -210,7 +232,7 @@ function renderInicio() {
 }
 
 function calcDiasSemCrise() {
-  const dias = crises.map(c => c.dia).filter(Boolean).sort();
+  const dias = crises.map(diaFimDe).filter(Boolean).sort();
   if (!dias.length) return null;
   const ultima = diaToDate(dias[dias.length - 1]);
   const hoje = diaToDate(todayISO());
@@ -226,7 +248,7 @@ function renderRegistar() {
   const c = editing || {
     dia: todayISO(),
     periodo: periodoFromDate(now),
-    duracao: '',
+    diaFim: todayISO(),
     intensidade: 5,
     localizacao: [],
     sintomas: [],
@@ -246,14 +268,19 @@ function renderRegistar() {
     <form id="form-crise" novalidate>
       <div class="card">
         <div class="field">
-          <label for="dia">Dia da crise *</label>
+          <label for="dia">Início da crise *</label>
           <input type="date" id="dia" value="${c.dia}" required />
         </div>
-        <div class="field" style="margin-bottom:0">
+        <div class="field">
           <label>Período do dia</label>
           <div class="chips" id="chips-periodo">
             ${PERIODOS.map(p => `<button type="button" class="chip" data-val="${esc(p)}" aria-pressed="${c.periodo === p}">${esc(p)} <span style="opacity:.6;font-size:.8em">${PERIODO_HORAS[p]}</span></button>`).join('')}
           </div>
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label for="diaFim">Fim da crise</label>
+          <input type="date" id="diaFim" value="${c.diaFim || ''}" />
+          <div class="hint">Deixe vazio se a crise ainda está a decorrer.</div>
         </div>
       </div>
 
@@ -265,16 +292,6 @@ function renderRegistar() {
             <span class="int-badge" id="int-badge">${c.intensidade}</span>
           </div>
           <div class="hint" id="int-desc"></div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="field" style="margin-bottom:0">
-          <label for="duracao">Duração aproximada</label>
-          <select id="duracao">
-            <option value="">—</option>
-            ${DURACOES.map(d => `<option value="${esc(d)}"${c.duracao === d ? ' selected' : ''}>${esc(d)}</option>`).join('')}
-          </select>
         </div>
       </div>
 
@@ -421,12 +438,14 @@ function collectSingleChip(containerId) {
 function onSubmit(e) {
   e.preventDefault();
   const dia = document.getElementById('dia').value;
-  if (!dia) { toast('Indique o dia da crise.'); return; }
+  if (!dia) { toast('Indique o dia de início da crise.'); return; }
+  const diaFim = document.getElementById('diaFim').value;
+  if (diaFim && diaFim < dia) { toast('O fim não pode ser antes do início.'); return; }
 
   const data = {
     dia,
+    diaFim,
     periodo: collectSingleChip('chips-periodo'),
-    duracao: document.getElementById('duracao').value,
     intensidade: +document.getElementById('intensidade').value,
     localizacao: collectChips('chips-loc'),
     sintomas: collectChips('chips-sin'),
@@ -492,9 +511,9 @@ function crisisCard(c) {
   (c.sintomas || []).slice(0, 2).forEach(s => tags.push(s));
   if (c.medicacao) tags.push('💊 ' + c.medicacao + (c.frequencia ? ' · ' + c.frequencia : ''));
   if (c.tempoEfeito) tags.push('⏱ efeito: ' + c.tempoEfeito);
-  const meta = c.duracao === 'Ainda a decorrer'
+  const meta = !c.diaFim
     ? '<span class="ongoing">Ainda a decorrer</span>'
-    : (c.duracao ? 'Duração: ' + c.duracao : '');
+    : 'Duração: ' + duracaoTexto(c);
   return `
     <div class="crisis">
       <div class="intensity" style="background:${intensityColor(c.intensidade)}">${c.intensidade}</div>
@@ -582,7 +601,8 @@ function renderEstatisticas() {
   }
 
   // Duração
-  const durCounts = DURACOES.map(d => [d, crises.filter(c => c.duracao === d).length]).filter(x => x[1] > 0);
+  const CATS = ['Mesmo dia', '2–3 dias', '4+ dias', 'Ainda a decorrer'];
+  const durCounts = CATS.map(d => [d, crises.filter(c => duracaoCategoria(c) === d).length]).filter(x => x[1] > 0);
   if (durCounts.length) {
     const maxDur = Math.max(...durCounts.map(d => d[1]));
     html += `
@@ -727,7 +747,7 @@ function exportJSON() {
 }
 function exportCSV() {
   if (!crises.length) { toast('Não há registos para exportar.'); return; }
-  const cols = ['dia', 'periodo', 'duracao', 'intensidade', 'localizacao', 'sintomas', 'gatilhos', 'medicacao', 'frequencia', 'eficacia', 'tempoEfeito', 'notas'];
+  const cols = ['dia', 'diaFim', 'periodo', 'intensidade', 'localizacao', 'sintomas', 'gatilhos', 'medicacao', 'frequencia', 'eficacia', 'tempoEfeito', 'notas'];
   const head = cols.join(';');
   const rows = crises.map(c => cols.map(k => {
     let v = c[k];
