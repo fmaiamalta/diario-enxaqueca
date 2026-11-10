@@ -181,7 +181,7 @@ function renderInicio() {
   const emCurso = crises.find(c => !c.diaFim);
 
   let html = `
-    <div class="brand">
+    <div class="brand topbar">
       <img class="brand-logo" src="icons/icon.svg" alt="" width="48" height="48" />
       <div>
         <h1>Diário de Enxaqueca</h1>
@@ -270,8 +270,10 @@ function renderRegistar() {
   const savedMeds = getSavedMeds();
 
   app.innerHTML = `
-    <h1>${editing ? 'Editar crise' : 'Registar crise'}</h1>
-    <p class="subtitle">${editing ? 'Atualize os dados desta crise.' : 'Preencha o que souber. Só o dia e a intensidade são obrigatórios.'}</p>
+    <div class="topbar">
+      <h1>${editing ? 'Editar crise' : 'Registar crise'}</h1>
+      <p class="subtitle">${editing ? 'Atualize os dados desta crise.' : 'Preencha o que souber. Só o dia e a intensidade são obrigatórios.'}</p>
+    </div>
 
     <form id="form-crise" novalidate>
       <div class="card">
@@ -496,7 +498,7 @@ function renderHistorico() {
   }
 
   const sorted = [...crises].sort((a, b) => sortVal(b) - sortVal(a));
-  let html = `<div class="page-head"><div><h1>Histórico</h1><p class="subtitle">${crises.length} ${crises.length === 1 ? 'registo' : 'registos'} no total.</p></div>${addBtn()}</div>`;
+  let html = `<div class="page-head topbar"><div><h1>Histórico</h1><p class="subtitle">${crises.length} ${crises.length === 1 ? 'registo' : 'registos'} no total.</p></div>${addBtn()}</div>`;
 
   let lastKey = '';
   for (const c of sorted) {
@@ -577,7 +579,7 @@ function renderEstatisticas() {
   const topSin = topCounts(crises.flatMap(c => c.sintomas || []));
 
   let html = `
-    <div class="page-head"><div><h1>Estatísticas</h1><p class="subtitle">Padrões a partir dos seus ${total} registos.</p></div>${addBtn()}</div>
+    <div class="page-head topbar"><div><h1>Estatísticas</h1><p class="subtitle">Padrões a partir dos seus ${total} registos.</p></div>${addBtn()}</div>
 
     <div class="stats-grid" style="margin-bottom:14px">
       <div class="stat"><span class="num">${total}</span><span class="lbl">crises</span></div>
@@ -688,8 +690,10 @@ function barRow(name, n, max) {
    ====================================================== */
 function renderDados() {
   app.innerHTML = `
-    <h1>Os seus dados</h1>
-    <p class="subtitle">Tudo é guardado apenas neste dispositivo.</p>
+    <div class="topbar">
+      <h1>Os seus dados</h1>
+      <p class="subtitle">Tudo é guardado apenas neste dispositivo.</p>
+    </div>
 
     <div class="inline-note">
       🔒 Os registos ficam no seu telemóvel. Nada é enviado para a internet. Faça cópias de segurança de vez em quando.

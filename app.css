@@ -60,6 +60,19 @@ h2 { font-size: 1.1rem; margin: 26px 0 12px; letter-spacing: -.01em; }
 .brand-logo { flex: 0 0 auto; border-radius: 12px; box-shadow: var(--shadow); }
 .brand h1 { margin: 0; }
 
+/* ---- Cabeçalho fixo (sticky) ---- */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: var(--bg);
+  margin: calc(-1 * (env(safe-area-inset-top, 0px) + 18px)) -16px 16px;
+  padding: calc(env(safe-area-inset-top, 0px) + 14px) 16px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.topbar h1 { margin: 0; }
+.topbar .subtitle { margin: 2px 0 0; }
+
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
